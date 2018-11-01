@@ -16,6 +16,11 @@ data Token = LBracket
            | TInt Int
            deriving (Show)
 
+
+toJson :: String -> JValue
+toJson str = parseNest $ nest $ tokenize str
+
+
 -- A parser is a tuple of a JValue and the remaining string.
 -- We want a way to recursively parse, then return and continue the parse with
 -- the actual string left: 

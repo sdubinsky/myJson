@@ -1,5 +1,8 @@
 module PrettyPrint where
 import Parser
+fromJson :: JValue -> String
+fromJson jvalue  = prettyPrint 0 jvalue
+
 prettyPrint :: Int -> JValue -> String
 prettyPrint i (JString s) = s
 prettyPrint i (JNumber num) = show num
