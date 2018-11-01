@@ -1,10 +1,11 @@
 module Parser where
 import Data.Char
+
 data JValue = JObject [(String, JValue)]
             | JArray [JValue]
             | JString String
             | JNumber Double
-            deriving (Show)
+            deriving (Show, Eq)
 
 data Token = LBracket
            | RBracket
@@ -44,10 +45,7 @@ tokenize (x:xs) | x == '{' = LBrace : tokenize xs
                 | otherwise = error "tokenize error"
 
 -- If your thing is recursive, recurse with nestMany.  If not, just create that one
--- bottom-level nest and return.
-
-parseOne :: [Token] -> (JValue, [Token])
-parseOne = undefined
+-- bottom-level nest and return the rest of the tokens.
 
 data N = NArray [N]
        | NObject [N]
@@ -65,16 +63,13 @@ nestOne (LBrace:ts) =
 nestOne (LBracket:ts) =
   let (ns, ts') = nestMany [] ts
   in ([NArray ns], ts')
-nestOne (TColon:ts) = 
-  let (ns, ts') = nestMany [] ts
-  in (NColon:ns, ts')
 
 nestOne (TString s:ts) = ([NString s], ts)
 nestOne (TInt i:ts) = ([NInt i], ts)
 nestOne (RBrace:ts) = ([], ts)
 nestOne (RBracket:ts) = ([], ts)
 nestOne (TComma:ts) = ([NComma], ts)
-
+nestOne (TColon:ts) = ([NColon], ts)
 nestMany :: [N] -> [Token] -> ([N], [Token])
 nestMany prev ts =
   case nestOne ts of
