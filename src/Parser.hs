@@ -34,7 +34,54 @@ tokenize (x:xs) | x == '{' = LBrace : tokenize xs
                 | isWhitespace x = tokenize xs
                 | x == '"' = TString (takeWhile (/= '"') xs) : tokenize (tail $ dropWhile (/= '"') xs) -- the tail is to skip the closing quotation mark
                 | isDigit x = TInt (read (x:takeWhile isDigit xs)) : tokenize (dropWhile isDigit xs)
+                | otherwise = error "tokenize error"
 
+-- If your thing is recursive, recurse with nestMany.  If not, just create that one
+-- bottom-level nest and return.
+
+parseOne :: [Token] -> (JValue, [Token])
+parseOne = undefined
+
+data N = NArray [N]
+       | NObject [N]
+       | NString String
+       | NInt Int
+       deriving (Show)
+
+nestOne :: [Token] -> ([N], [Token])
+nestOne [] = ([], [])
+nestOne (LBrace:ts) =
+  let (ns, ts') = nestMany [] ts
+  in ([NObject ns], ts')
+nestOne (LBracket:ts) =
+  let (ns, ts') = nestMany [] ts
+  in ([NArray ns], ts')
+nestOne (TColon:ts) = 
+  let (ns, ts') = nestMany [] ts
+  in (ns, ts')
+
+nestOne (TString s:ts) = ([NString s], ts)
+nestOne (TInt i:ts) = ([NInt i], ts)
+nestOne (RBrace:ts) = ([], ts)
+nestOne (RBracket:ts) = ([], ts)
+
+
+nestMany :: [N] -> [Token] -> ([N], [Token])
+nestMany prev ts =
+  case nestOne ts of
+    ([], ts') -> (prev, ts')
+    (ns, ts') -> nestMany (prev ++ ns) ts'
+
+nest :: [Token] -> N
+nest (tokens) =
+  let (ns, ts) = nestMany [] tokens
+      nestLen = length ns
+      tokenLen = length ts
+  in
+    if (nestLen > 1 || tokenLen > 0)
+    then error "parse error"
+    else head ns
+    
 isWhitespace :: Char -> Bool
 isWhitespace x | x == ' '  = True
                | x == '\n' = True
