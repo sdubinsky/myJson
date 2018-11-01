@@ -11,6 +11,7 @@ data Token = LBracket
            | LBrace
            | RBrace
            | TColon
+           | TComma
            | TString String
            | TInt Int
            deriving (Show)
@@ -31,6 +32,7 @@ tokenize (x:xs) | x == '{' = LBrace : tokenize xs
                 | x == '[' = LBracket : tokenize xs
                 | x == ']' = RBracket : tokenize xs
                 | x == ':' = TColon : tokenize xs
+                | x == ',' = TComma : tokenize xs
                 | isWhitespace x = tokenize xs
                 | x == '"' = TString (takeWhile (/= '"') xs) : tokenize (tail $ dropWhile (/= '"') xs) -- the tail is to skip the closing quotation mark
                 | isDigit x = TInt (read (x:takeWhile isDigit xs)) : tokenize (dropWhile isDigit xs)
@@ -46,7 +48,9 @@ data N = NArray [N]
        | NObject [N]
        | NString String
        | NInt Int
-       deriving (Show)
+       | NColon
+       | NComma
+       deriving (Show, Eq)
 
 nestOne :: [Token] -> ([N], [Token])
 nestOne [] = ([], [])
@@ -58,13 +62,13 @@ nestOne (LBracket:ts) =
   in ([NArray ns], ts')
 nestOne (TColon:ts) = 
   let (ns, ts') = nestMany [] ts
-  in (ns, ts')
+  in (NColon:ns, ts')
 
 nestOne (TString s:ts) = ([NString s], ts)
 nestOne (TInt i:ts) = ([NInt i], ts)
 nestOne (RBrace:ts) = ([], ts)
 nestOne (RBracket:ts) = ([], ts)
-
+nestOne (TComma:ts) = ([NComma], ts)
 
 nestMany :: [N] -> [Token] -> ([N], [Token])
 nestMany prev ts =
@@ -79,9 +83,24 @@ nest (tokens) =
       tokenLen = length ts
   in
     if (nestLen > 1 || tokenLen > 0)
-    then error "parse error"
+    then error "nesting parse error"
     else head ns
-    
+
+parseNest :: N -> JValue
+parseNest (NString str) = JString str
+parseNest (NInt i) = JNumber $ fromIntegral i
+parseNest (NObject ns) = JObject $ objectTuples ns
+parseNest (NArray ns) = JArray $ array ns
+
+objectTuples :: [N] -> [(String, JValue)]
+objectTuples [] = []
+objectTuples ((NString str):NColon:n:ns) =
+  (str, parseNest n) : objectTuples ns
+objectTuples (NComma:ns) = objectTuples ns
+objectTuples _ = error "bad object format"
+
+array :: [N] -> [JValue]
+array ns = map parseNest $ filter (/= NComma) ns
 isWhitespace :: Char -> Bool
 isWhitespace x | x == ' '  = True
                | x == '\n' = True
