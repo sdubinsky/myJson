@@ -13,6 +13,9 @@ main = do
                                       ,parseSimpleObjectTest
                                       ,parseNestedArrayTest
                                       ,parseNestedObjectTest
+                                      ,failTokenizeTest
+                                      ,failNestTest
+                                      ,failObjectTest
                                       ])
 
 parseNumberTest :: TestTree
@@ -75,3 +78,28 @@ parseNestedObjectTest =
             ("f", JString "awekfhjaeflk")])
     (toJson input))
   
+
+failTokenizeTest :: TestTree
+failTokenizeTest =
+  let input =
+        " " in
+    testCase "test tokenizing fails"
+    (assertEqual "should fail tokenizing"
+    (Left TokenizeError)
+    (toJson input))
+
+failNestTest :: TestTree
+failNestTest =
+  let input = "{\"a\": 1}, \"b\": 2" in
+    testCase "test nesting fails"
+    (assertEqual "should fail nesting"
+    (Left NestError)
+    (toJson input))
+
+failObjectTest :: TestTree
+failObjectTest =
+  let input = "{\"a\" \"b\"}" in
+    testCase "test bad formatted object fails"
+    (assertEqual "should fail object format"
+    (Left ObjectFormatError)
+    (toJson input))
