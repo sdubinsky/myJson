@@ -1,5 +1,7 @@
 module Parser where
 import Data.Char
+import Data.Bool
+import Control.Monad
 
 data JValue = JObject [(String, JValue)]
             | JArray [JValue]
@@ -18,10 +20,8 @@ data Token = LBracket
            deriving (Show)
 
 
-toJson :: String -> JValue
-toJson str = parseNest $ nest $ tokenize str
-
-
+toJson :: String -> Either String JValue
+toJson = parseNest <=< nest <=< tokenizeStart
 -- A parser is a tuple of a JValue and the remaining string.
 -- We want a way to recursively parse, then return and continue the parse with
 -- the actual string left: 
@@ -29,20 +29,27 @@ toJson str = parseNest $ nest $ tokenize str
 -- where k = takeWhile isChar cs
 --       n = length k
 -- from: https://jameshfisher.com/2018/03/09/writing-a-parser-in-haskell.html
-
-
-tokenize :: String -> [Token]
-tokenize [] = []
-tokenize (x:xs) | x == '{' = LBrace : tokenize xs
-                | x == '}' = RBrace : tokenize xs
-                | x == '[' = LBracket : tokenize xs
-                | x == ']' = RBracket : tokenize xs
-                | x == ':' = TColon : tokenize xs
-                | x == ',' = TComma : tokenize xs
-                | isWhitespace x = tokenize xs
-                | x == '"' = TString (takeWhile (/= '"') xs) : tokenize (tail $ dropWhile (/= '"') xs) -- the tail is to skip the closing quotation mark
-                | isDigit x = TInt (read (x:takeWhile isDigit xs)) : tokenize (dropWhile isDigit xs)
-                | otherwise = error "tokenize error"
+tokenizeStart :: String -> Either String [Token]
+tokenizeStart str = tokenize (filter (not . isWhitespace) str) []
+tokenize :: String -> [Token] -> Either String [Token]
+tokenize [] [] = Left "tokenize error"
+tokenize [] ts = Right ts
+tokenize cs ts =
+  let ret = singleToken cs in
+    case ret of
+      Left str -> Left str
+      Right (token, str) -> tokenize str (ts ++ [token])
+      
+singleToken :: String -> Either String (Token, String)
+singleToken (x:xs) | x == '{' = Right $ (LBrace, xs)
+                   | x == '}' = Right $ (RBrace,  xs)
+                   | x == '[' = Right $ (LBracket, xs)
+                   | x == ']' = Right $ (RBracket, xs)
+                   | x == ':' = Right $ (TColon, xs)
+                   | x == ',' = Right $ (TComma, xs)
+                   | x == '"' = Right $ (TString (takeWhile (/= '"') xs), (tail $ dropWhile (/= '"') xs)) -- the tail is to skip the closing quotation mark
+                | isDigit x = Right $ (TInt (read (x:takeWhile isDigit xs)), (dropWhile isDigit xs))
+                | otherwise = Left "tokenize error"
 
 -- If your thing is recursive, recurse with nestMany.  If not, just create that one
 -- bottom-level nest and return the rest of the tokens.
@@ -76,31 +83,56 @@ nestMany prev ts =
     ([], ts') -> (prev, ts')
     (ns, ts') -> nestMany (prev ++ ns) ts'
 
-nest :: [Token] -> N
-nest (tokens) =
+nest :: [Token] -> Either String N
+nest tokens =
   let (ns, ts) = nestMany [] tokens
       nestLen = length ns
       tokenLen = length ts
   in
     if (nestLen > 1 || tokenLen > 0)
-    then error "nesting parse error"
-    else head ns
+    then Left "nesting parse error"
+    else Right $ head ns
 
-parseNest :: N -> JValue
-parseNest (NString str) = JString str
-parseNest (NInt i) = JNumber $ fromIntegral i
-parseNest (NObject ns) = JObject $ objectTuples ns
-parseNest (NArray ns) = JArray $ array ns
+parseNest :: N -> Either String JValue
+parseNest (NString str) = Right $ JString str
+parseNest (NInt i) = Right $ JNumber $ fromIntegral i
+parseNest (NObject ns) =
+  let ts = objectTuples ns in
+    case ts of
+      Left str -> Left str
+      Right tuples -> Right $ JObject tuples
+parseNest (NArray ns) =
+  let ts = array ns in
+    case ts of
+      Left str -> Left str
+      Right tuples -> Right $ JArray tuples
 
-objectTuples :: [N] -> [(String, JValue)]
-objectTuples [] = []
+objectTuples :: [N] -> Either String [(String, JValue)]
+objectTuples [] = Right []
 objectTuples ((NString str):NColon:n:ns) =
-  (str, parseNest n) : objectTuples ns
+  let moreTuples = objectTuples ns in
+    case moreTuples of
+      Left str -> Left str
+      Right ts ->
+        let val = parseNest n in
+          case val of
+            Left str -> Left str
+            Right vs -> Right $ (str, vs) : ts
+            
 objectTuples (NComma:ns) = objectTuples ns
 objectTuples _ = error "bad object format"
 
-array :: [N] -> [JValue]
-array ns = map parseNest $ filter (/= NComma) ns
+array :: [N] -> Either String [JValue]
+array ns = arrayHelper ns []
+arrayHelper :: [N] -> [JValue] -> Either String [JValue]
+arrayHelper [] [] = Right []
+arrayHelper [] js = Right js
+arrayHelper (NComma:ns) js = arrayHelper ns js
+arrayHelper (n:ns) js =
+  let ans = parseNest n in
+    case ans of
+      Left str -> Left str
+      Right a -> arrayHelper ns (js ++ [a])
 isWhitespace :: Char -> Bool
 isWhitespace x | x == ' '  = True
                | x == '\n' = True
