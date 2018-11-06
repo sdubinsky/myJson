@@ -123,16 +123,8 @@ objectTuples (NComma:ns) = objectTuples ns
 objectTuples _ = error "bad object format"
 
 array :: [N] -> Either String [JValue]
-array ns = arrayHelper ns []
-arrayHelper :: [N] -> [JValue] -> Either String [JValue]
-arrayHelper [] [] = Right []
-arrayHelper [] js = Right js
-arrayHelper (NComma:ns) js = arrayHelper ns js
-arrayHelper (n:ns) js =
-  let ans = parseNest n in
-    case ans of
-      Left str -> Left str
-      Right a -> arrayHelper ns (js ++ [a])
+array ns = monadicArray parseNest (filter (/= NComma) ns) []
+
 isWhitespace :: Char -> Bool
 isWhitespace x | x == ' '  = True
                | x == '\n' = True
@@ -140,3 +132,11 @@ isWhitespace x | x == ' '  = True
                | x == '\t' = True
                | otherwise = False
 
+monadicArray :: (a -> Either b c) -> [a] -> [c] -> Either b [c]
+monadicArray f [] [] = Right []
+monadicArray f [] cs = Right cs
+monadicArray f (a:as) cs =
+  let ans = f a in
+    case ans of
+      Left s -> Left s
+      Right t -> monadicArray f as (cs ++ [t])
