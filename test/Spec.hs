@@ -19,13 +19,13 @@ parseNumberTest :: TestTree
 parseNumberTest =
   let input = "12345" in
     testCase "testing number parsing"
-    (assertEqual "should parse a number"  (JNumber 12345.0) (toJson input))
+    (assertEqual "should parse a number"  (Right $ JNumber 12345.0) (toJson input))
 
 parseStringTest :: TestTree
 parseStringTest =
   let input = "\"asdfad\"" in
     testCase "testing string parsing"
-    (assertEqual "should parse a string" (JString "asdfad") (toJson input))
+    (assertEqual "should parse a string" (Right $ JString "asdfad") (toJson input))
 
 
 parseSimpleArrayTest :: TestTree
@@ -33,7 +33,7 @@ parseSimpleArrayTest =
   let input = "[1,2,3,\"asdf\",4,5,6]" in
     testCase "testing simple array parsing"
     (assertEqual "should parse a simple array"
-      (JArray [
+      (Right $ JArray [
           JNumber 1
           , JNumber 2
           , JNumber 3
@@ -48,7 +48,7 @@ parseSimpleObjectTest =
   let input = "{\"a\": 1, \"b\": 2}" in
     testCase "testing simple object parsing"
     (assertEqual "should parse a simple object"
-     (JObject [("a", JNumber 1), ("b", JNumber 2)])
+     (Right $ JObject [("a", JNumber 1), ("b", JNumber 2)])
      (toJson input))
 
 
@@ -57,7 +57,7 @@ parseNestedArrayTest =
   let input = "[1,2,3, [4,5,6], {\"a\": 1, \"b\": 2}, 7]" in
     testCase "testing nested array parsing"
     (assertEqual "should parse a nested array"
-    (JArray [JNumber 1, JNumber 2, JNumber 3,
+    (Right $ JArray [JNumber 1, JNumber 2, JNumber 3,
            JArray [JNumber 4, JNumber 5, JNumber 6],
            JObject [("a", JNumber 1), ("b", JNumber 2)], JNumber 7])
     (toJson input))
@@ -68,7 +68,7 @@ parseNestedObjectTest =
         "{\"a\": 1, \"b\": 2, \"c\": [1,2,3, [4,5,6], {\"a\": 1, \"b\": 2}], \"f\": \"awekfhjaeflk\"}" in
     testCase "testing nested object parsing"
     (assertEqual "should parse a nested object"
-     (JObject [("a", JNumber 1), ("b", JNumber 2),
+     (Right $ JObject [("a", JNumber 1), ("b", JNumber 2),
              ("c", JArray [JNumber 1, JNumber 2, JNumber 3,
            JArray [JNumber 4, JNumber 5, JNumber 6],
            JObject [("a", JNumber 1), ("b", JNumber 2)]]),
