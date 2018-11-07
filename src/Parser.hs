@@ -25,7 +25,10 @@ data Error = TokenizeError
            deriving (Show, Eq)
 
 toJson :: String -> Either Error JValue
-toJson = parseNest <=< nest <=< tokenizeStart
+toJson str = do
+  tokens <- tokenizeStart str
+  nest <- nest tokens
+  parseNest nest
 -- A parser is a tuple of a JValue and the remaining string.
 -- We want a way to recursively parse, then return and continue the parse with
 -- the actual string left: 
@@ -111,7 +114,7 @@ parseNest (NArray ns) =
       Left err -> Left err
       Right tuples -> Right $ JArray tuples
 
-objectTuples :: [N] -> Either Error[(String, JValue)]
+objectTuples :: [N] -> Either Error [(String, JValue)]
 objectTuples [] = Right []
 objectTuples ((NString str):NColon:n:ns) =
   let moreTuples = objectTuples ns in
