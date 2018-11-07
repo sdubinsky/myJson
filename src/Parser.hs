@@ -29,23 +29,30 @@ toJson str = do
   tokens <- tokenizeStart str
   nest <- nest tokens
   parseNest nest
+  
 -- A parser is a tuple of a JValue and the remaining string.
--- We want a way to recursively parse, then return and continue the parse with
--- the actual string left: 
--- (JString k):(drop n cs)
--- where k = takeWhile isChar cs
---       n = length k
 -- from: https://jameshfisher.com/2018/03/09/writing-a-parser-in-haskell.html
+
 tokenizeStart :: String -> Either Error [Token]
 tokenizeStart str = tokenize (filter (not . isWhitespace) str) []
 tokenize :: String -> [Token] -> Either Error [Token]
 tokenize [] [] = Left TokenizeError
 tokenize [] ts = Right ts
-tokenize cs ts =
-  let ret = singleToken cs in
-    case ret of
-      Left err -> Left err
-      Right (token, str) -> tokenize str (ts ++ [token])
+tokenize cs ts = do
+  (token, str) <- singleToken cs
+  tokenize str (ts ++ [token])
+  -- singleToken cs >>= \(token, str) -> tokenize str (ts ++ [token])
+
+nest :: [Token] -> Either Error N
+nest tokens =
+  let (ns, ts) = nestMany [] tokens
+      nestLen = length ns
+      tokenLen = length ts
+  in
+    if (nestLen > 1 || tokenLen > 0)
+    then Left NestError
+    else Right $ head ns
+
       
 singleToken :: String -> Either Error (Token, String)
 singleToken (x:xs) | x == '{' = Right $ (LBrace, xs)
@@ -90,47 +97,45 @@ nestMany prev ts =
     ([], ts') -> (prev, ts')
     (ns, ts') -> nestMany (prev ++ ns) ts'
 
-nest :: [Token] -> Either Error N
-nest tokens =
-  let (ns, ts) = nestMany [] tokens
-      nestLen = length ns
-      tokenLen = length ts
-  in
-    if (nestLen > 1 || tokenLen > 0)
-    then Left NestError
-    else Right $ head ns
-
 parseNest :: N -> Either Error JValue
 parseNest (NString str) = Right $ JString str
 parseNest (NInt i) = Right $ JNumber $ fromIntegral i
-parseNest (NObject ns) =
-  let ts = objectTuples ns in
-    case ts of
-      Left err -> Left err
-      Right tuples -> Right $ JObject tuples
-parseNest (NArray ns) =
-  let ts = array ns in
-    case ts of
-      Left err -> Left err
-      Right tuples -> Right $ JArray tuples
+parseNest (NObject ns) = do 
+  tuples <- objectTuples ns
+  return $ JObject tuples
+  
+  -- (objectTuples >=> return . JObject) ns
+
+  -- objectTuples ns >>= \a -> Right $ JObject a
+  -- tuples <- objectTuples ns
+  -- return $ JObject tuples
+
+  -- let ts = objectTuples ns in
+  --   case ts of
+  --     Left err -> Left err
+  --     Right tuples -> Right $ JObject tuples
+
+parseNest (NArray ns) = do
+  ts <- array (filter (/= NComma) ns)
+  return $ JArray ts
 
 objectTuples :: [N] -> Either Error [(String, JValue)]
 objectTuples [] = Right []
-objectTuples ((NString str):NColon:n:ns) =
-  let moreTuples = objectTuples ns in
-    case moreTuples of
-      Left str -> Left str
-      Right ts ->
-        let val = parseNest n in
-          case val of
-            Left err -> Left err
-            Right vs -> Right $ (str, vs) : ts
+objectTuples ((NString str):NColon:n:ns) = do
+  moreTuples <- objectTuples ns
+  nest <- parseNest n
+  return $ (str, nest) : moreTuples
             
 objectTuples (NComma:ns) = objectTuples ns
 objectTuples _ = Left ObjectFormatError
 
 array :: [N] -> Either Error [JValue]
-array ns = monadicArray parseNest (filter (/= NComma) ns) []
+array [] = Right []
+array (NComma:ns) = array ns
+array (n:ns) = do
+  nest <- parseNest n
+  js <- array ns
+  return (nest:js)
 
 isWhitespace :: Char -> Bool
 isWhitespace x | x == ' '  = True
@@ -138,12 +143,3 @@ isWhitespace x | x == ' '  = True
                | x == '\r' = True
                | x == '\t' = True
                | otherwise = False
-
-monadicArray :: (a -> Either b c) -> [a] -> [c] -> Either b [c]
-monadicArray f [] [] = Right []
-monadicArray f [] cs = Right cs
-monadicArray f (a:as) cs =
-  let ans = f a in
-    case ans of
-      Left s -> Left s
-      Right t -> monadicArray f as (cs ++ [t])
